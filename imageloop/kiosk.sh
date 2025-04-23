@@ -1,13 +1,24 @@
 #!/bin/bash
-# Wait for network connection and X server to load
-sleep 10
 
-# prevent xset noblank
-xset s noblank
-xset s off
-xset -dpms
+# Ensure XAUTHORITY is set
+export XAUTHORITY=/home/pi/.Xauthority
 
-# hide mouse cursor
-# unclutter -idle 0.5 -root &
+# Infinite loop to keep service active
+while true; do
+  # Wait for X server
+  while ! xset q &>/dev/null; do sleep 1; done
+  
+  # Prevent power management
+  xset s noblank
+  xset s off
+  xset -dpms
 
-chromium-browser --noerrdialogs --kiosk --incognito "http://192.168.6.54/Students" &
+  # Hide cursor
+  unclutter -idle 0.5 -root &
+  
+  # Launch browser (foreground, no &)
+  chromium-browser --noerrdialogs --kiosk --incognito "http://your-url"
+  
+  # If browser crashes, wait before restart
+  sleep 5
+done

@@ -1,60 +1,74 @@
-### Make the Script Executable
+### Modify the Service File
 
 ```
-chmod +x ~/kiosk.sh
+sudo nano /etc/systemd/system/kiosk.service
 ```
 
-### Configure Autostart
-
-#### For Raspberry Pi OS with desktop (using LXDE):
-
+Change to:
 
 ```
-mkdir -p ~/.config/lxsession/LXDE-pi
-echo "@lxterminal -e /home/pi/kiosk.sh" > ~/.config/lxsession/LXDE-pi/autostart
+[Unit]
+Description=Kiosk Mode
+After=graphical.target network-online.target
+Wants=network-online.target
+
+[Service]
+User=pi
+Environment=DISPLAY=:0
+ExecStart=/home/pi/kiosk.sh
+Restart=on-failure
+RestartSec=5
+# Keep service active even if main process forks
+Type=simple
+
+[Install]
+WantedBy=graphical.target
 ```
 
-### Or for system-wide configuration:
+### Critical Follow-Up Commands
 
 ```
-sudo nano /etc/xdg/lxsession/LXDE-pi/autostart
+# Reload systemd config
+sudo systemctl daemon-reload
+# Restart service
+sudo systemctl restart kiosk.service
+# Monitor logs in real-time
+journalctl -u kiosk.service -f
 ```
 
-#### Add this line at the end:
+### Troubleshooting Checklist
+
+    Verify Chromium path
 
 
-```
-@/home/pi/kiosk.sh
-```
+    which chromium-browser || which chromium
 
-### Optional: Install Unclutter (for hiding mouse cursor)
+    (Update script with correct path if needed)
 
-```
-sudo apt update && sudo apt install unclutter
-```
+    Check X permissions
 
-### Reboot to Test
+    ls -l /home/pi/.Xauthority
 
-```
-sudo reboot
-```
+    Test browser manually
+    bash
 
-#### Important Notes:
+    startx /home/pi/kiosk.sh
 
-    The script waits 10 seconds to ensure network connectivity
+    Increase GPU memory
+    In /boot/config.txt:
 
-    --kiosk flag enables fullscreen mode in Chromium
+    gpu_mem=256
 
-    --incognito prevents browser from restoring previous session
+### Expected Behavior
 
-    xset commands disable screen blanking
+Now your service should:
 
-    Adjust the sleep time if needed for your network speed
+    Wait for X server and network
 
-### Troubleshooting:
+    Keep Chromium running continuously
 
-    Check if Chromium is installed: sudo apt install chromium-browser
+    Auto-restart on crashes
 
-    Test the script manually before setting up autostart
+    Maintain active status in systemd
 
-    Check system logs with journalctl -u lightdm
+Let me know if you see specific errors in the updated logs!

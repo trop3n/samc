@@ -32,3 +32,7 @@ $action = {
     }
 }
 
+# register the event and keep the script running
+Register-ObjectEvent -InputObject $watcher -EventName "Created" -Action $action
+Log-Message "Starting watcher for $nasPath..."
+

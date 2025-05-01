@@ -36,3 +36,5 @@ $action = {
 Register-ObjectEvent -InputObject $watcher -EventName "Created" -Action $action
 Log-Message "Starting watcher for $nasPath..."
 
+# Keep the script running indefinitely
+while ($true) { Start-Sleep -Seconds 60 }

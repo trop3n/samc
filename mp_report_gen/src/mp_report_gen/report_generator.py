@@ -32,3 +32,8 @@ def get_events(access_token, params=None):
 
     while url:
         response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        data = response.json()
+        all_events.extend(data.get('objects', []))
+        url = data.get('NextPageLink') # handle pagination
+        

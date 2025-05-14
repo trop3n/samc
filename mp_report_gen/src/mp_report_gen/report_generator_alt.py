@@ -27,3 +27,28 @@ QUERY_PARAMS = {
     "$orderby": "Start_Date asc", # Order by start date
     # "$top": "50" # Optionally limit the number of results
 }
+
+# Report configuration
+REPORT_FILENAME = "ministry_platform_events_report.csv"
+REPORT_COLUMNS = ["Event Title", "Start Date", "Location", "Congregation", "Program", "Primary Contact"]
+
+def fetch_events_data():
+    """Fetches event data from the Ministry Platform API."""
+    full_url = f"{BASE_API_URL}/{EVENTS_ENDPOINT}"
+    print(f"Attempting to fetch data from: {full_url}")
+    print(f"With query parameters: {QUERY_PARAMS}")
+    print(f"Using headers: {HEADERS}")
+
+    try:
+        # make GET request to the API
+        # Ensure MP uses HTTPS
+        response = requests.get(full_url, headers=HEADERS, params=QUERY_PARAMS, timeout=30, verify=True)
+
+        # Raise exception for bad status codes (4xx or 5xx)
+        response.raise_for_status()
+
+        # Assuming the API returns JSON data
+        # The actual structure of the JSON response might vary.
+        # Ministry Platform often wraps results in a "value" array for OData.
+        # Or it might be a list of records directly. Inspect your API's actual response.
+        

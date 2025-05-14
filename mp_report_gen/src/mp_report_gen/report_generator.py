@@ -59,4 +59,30 @@ def generate_report(events):
     ]].copy()
 
     # generate Excel report
-    
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M')
+    filename = f'event_report_{timestamp}.xlsx'
+    report_df.to_excel(filename, index=False)
+    return filename
+
+def main():
+    try:
+        # Authenticate
+        token = get_access_token()
+
+        # set query parameters
+        params = {
+            '$select': 'Event_ID,Event_Title,Event_Start_Date,Event_End_Date,Location_Name,Event_Attendance',
+            '$filter': "Event_Start_Date gt '2024-01-01'",
+            '$orderby': 'Event_Start_Date desc'
+        }
+
+        # get data
+        events = get_events(token, params)
+
+        # generate report
+        report_file = generate_report(events)
+        print(f"Report generated: {report_file}")
+
+    except Exception as e:
+        print(f"Error: {str(e)}")
+

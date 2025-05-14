@@ -82,3 +82,25 @@ def generate_report(events_data, filename=REPORT_FILENAME):
 
             # write the header row
             writer.writerow(REPORT_COLUMNS)
+
+            # Write the event data rows
+            # This part needs to be carefully mapped to your actual data structure
+            # and the fields you selected in QUERY_PARAMS
+            for event in events_data:
+                row = [
+                    event.get("Event_Title", "N/A"),
+                    event.get("Start_Date", "N/A"), # Consider formatting this date
+                    event.get("Location_Name", "N/A"),
+                    event.get("Congregation_Name", "N/A"),
+                    event.get("Program_Name", "N/A"),
+                    event.get("Primary_Contact_Name", "N/A")  
+                ]
+                writer.writerow(row)
+        print(f"Report '{filename}' generated successfully.")
+    except IOError as e:
+        print(f"Error writing report to file: {e}")
+    except KeyError as e:
+        print(f"Error processing event data: Missing key {e}. Check your $select query and data structure.")
+
+if __name__ == "__main__":
+    

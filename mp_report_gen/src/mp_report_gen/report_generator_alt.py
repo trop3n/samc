@@ -103,4 +103,23 @@ def generate_report(events_data, filename=REPORT_FILENAME):
         print(f"Error processing event data: Missing key {e}. Check your $select query and data structure.")
 
 if __name__ == "__main__":
-    
+    print("Starting Ministry Platform Event Reporter...")
+
+    # --- Important Pre-run Check ---
+    if "YOUR_BASE_API_URL_HERE" in BASE_API_URL or \
+       "YOUR_EVENTS_TABLE_HERE" in EVENTS_ENDPOINT or \
+       "YOUR_API_KEY_HERE" in API_KEY:
+         print("\n" + "="*50)
+         print("!!! CONFIGURATION NEEDED !!!")
+         print("Please update BASE_API_URL, EVENTS_ENDPOINT, and API_KEY")
+         print("in the script with your actual MP details")
+         print("The script will not runn correctly with placeholder values.")
+         print("="*50 + "\n")
+    else:
+        events = fetch_events_data()
+        if events:
+            generate_report(events)
+        else:
+            print("Could not generate report due to issues fetching data.")
+
+    print("Ministry Platform Event Reporter finished.")

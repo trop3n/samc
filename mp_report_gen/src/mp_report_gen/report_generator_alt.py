@@ -51,4 +51,34 @@ def fetch_events_data():
         # The actual structure of the JSON response might vary.
         # Ministry Platform often wraps results in a "value" array for OData.
         # Or it might be a list of records directly. Inspect your API's actual response.
-        
+        data = response.json()
+        print("Successfully fetched data.")
+
+        # if data is wrapped (e.g. in a 'value' key for 0Data)
+        if isinstance(data, dict) and 'value' in data:
+            return data['value']
+        return data # if it's a direct list of records
+    
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching data from API: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            print(f"Response status code: {e.response.status_code}")
+            print(f"Response content: {e.response.text}")
+        return None
+    except ValueError as e: # includes JSONDecodeError
+        print(f"Error decoding JSON Response: {e}")
+        return None
+    
+def generate_report(events_data, filename=REPORT_FILENAME):
+    """Generates a CSV report from the events data"""
+    if not events_data:
+        print("No event data to generate report.")
+        return
+    
+    print(f"Generating report: {filename}...")
+    try:
+        with open(filename, mode='w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+
+            # write the header row
+            writer.writerow(REPORT_COLUMNS)

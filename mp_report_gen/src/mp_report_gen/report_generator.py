@@ -36,4 +36,27 @@ def get_events(access_token, params=None):
         data = response.json()
         all_events.extend(data.get('objects', []))
         url = data.get('NextPageLink') # handle pagination
-        
+
+    return all_events
+
+def generate_report(events):
+    """Create a formatted report"""
+    # process data
+    df = pd.DataFrame(events)
+
+    # basic cleaning/formatting
+    if 'Event_Start_Date' in df.columns:
+        df['Event_Start_Date'] = pd.to_datetime(df['Event_Start_Date'])
+
+    # Select relevant columns
+    report_df = df[[
+        'Event_ID',
+        'Event_Title',
+        'Event_Start_Date',
+        'Event_End_Date',
+        'Location_Name',
+        'Event_Attendance'
+    ]].copy()
+
+    # generate Excel report
+    

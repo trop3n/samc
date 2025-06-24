@@ -1,6 +1,9 @@
 import os
 import requests
 from datetime import datetime
+from dotenv import load_dotenv # import load_dotenv
+
+load_dotenv()
 
 try:
     from vimeo import VimeoClient
@@ -10,14 +13,16 @@ except ImportError:
     print("Exiting script.")
     exit()
 
-VIMEO_ACCESS_TOKEN = '8664fc76f459de85abd99a19345840fe'
-VIMEO_FOLDER_ID = '25750561'
+VIMEO_ACCESS_TOKEN = os.getenv('VIMEO_ACCESS_TOKEN')
+VIMEO_FOLDER_ID = os.getenv('VIMEO_FOLDER_ID')
+VIMEO_SECRET = os.getenv('VIMEO_SECRET')
+VIMEO_KEY = os.getenv('VIMEO_KEY')
 DATE_FORMAT = "%Y-%m-%d"
 
 client = VimeoClient(
     token=VIMEO_ACCESS_TOKEN,
-    key='8664fc76f459de85abd99a19345840fe',
-    secret='yNgvHKNfZPq8L8rj3baw228avZCFTzqr3LJ7M1LeeXRg9hdkPia8uBChT+NkFsV5sfXcYVT2p5vPfxQMOTbyxxMDf8JFe4priT/Nr3kpK3WkWDJNW7Ujq71lQiPGofW2'
+    key=VIMEO_KEY,
+    secret=VIMEO_SECRET
 )
 
 def get_authenticated_user_id() -> str | None:
@@ -48,8 +53,8 @@ def get_folder_videos(album_id: str) -> list[dict]:
     Fetches all videos within a specific Vimeo album. Handles pagination.
 
     Args:
-        album_id (str): The ID of the Vimeo album.
-
+        user_id (str): The ID of the Vimeo user who owns the folder.
+        folder_id (str): The ID of the Vimeo folder.
     Returns:
         list[dict]: A list of dictionaries, each containing video information.
                     Returns an empty list if an error occurs or no videos are found.
@@ -58,14 +63,14 @@ def get_folder_videos(album_id: str) -> list[dict]:
     page = 1
     per_page = 100
 
-    print(f"Fetching videos from Vimeo Album ID: {album_id}")
+    print(f"Fetching videos from Vimeo Folder ID: {folder_id}")
     while True:
         try:
-            # The /albums/{album_id}/videos endpoint returns videos in an album.
+            # CORRECTED ENDPOINT: Using /users/{user_id}/folders/{folder_id}/videos for Vimeo folders.
             # We're requesting basic fields: name (title), created_time (upload date), and uri (for ID).
             # FIX: Changed 'query' to 'params' for correct parameter passing.
             response = client.get(
-                f'/album/{album_id}/videos',
+                f'/users/{user_id}/folders/{folder_id}/videos',
                 params={'page': page, 'per_page': per_page, 'fields': 'name,created_time,uri'}
             )
             response.raise_for_status() # Raise an HTTP error for bad responses
@@ -78,7 +83,7 @@ def get_folder_videos(album_id: str) -> list[dict]:
             all_videos.extend(videos_on_page)
 
             # check for more pages
-            if len(videos_on_page) < per_page:
+            if data.get('paging', {}).get('next') is None:
                 break # last page or fewer than per_page items
 
             page += 1
@@ -148,7 +153,7 @@ def main():
         print("ERROR: please replace your 'VIMEO_ACCESS_TOKEN' with correct token.")
         return
     if VIMEO_FOLDER_ID == '25750561':
-        print("ERROR: Please replace 'YOUR_VIMEO_ALBUM_ID' with the actual ID of your Vimeo album.")
+        print("ERROR: Please replace 'YOUR_VIMEO_FOLDER_ID' with the actual ID of your Vimeo folder.")
         return
     print(f"Starting Vimeo album processing for Album ID: {VIMEO_FOLDER_ID}")
 
@@ -215,7 +220,7 @@ def main():
 
     print(f"\n--- Processing Summary ---")
     print(f"Videos Processing and Updated: {processed_count}")
-    print(f"Videos Skipped (error, already dateed, or missing info): {skipped_count}")
+    print(f"Videos Skipped (error, already dated, or missing info): {skipped_count}")
     print("---------------------------")
 
 if __name__ == "__main__":

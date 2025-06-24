@@ -159,3 +159,34 @@ def main():
 
         try: 
             dt_object = datetime.fromisoformat(upload_date_str.replace('Z', '+00:00')) # handle 'Z' for UTC
+            formatted_date = dt.object.strftime(DATE_FORMAT)
+            print(f" Formatted Date: {formatted_date}")
+
+            # Check if the title already contains the date to avoid duplicates
+            if formatted_date in current_title:
+                print(f "Video title already contains the date '{formatted_date}'. No update needed.")
+                skipped_count += 1
+                continue
+
+            new_title = f"{current_title} ({formatted_date})"
+            print(f" New Title will be: '{new_title}'")
+
+            if update_video_title(video_id, new_title):
+                processed_count += 1
+            else:
+                skipped_count += 1 # count as skipped if update failed
+
+        except ValueError as e:
+            print(f" Error parsing date '{upload_date_str}': {e}. Please check DATE_FORMAT. Skipping.")
+            skipped_count += 1
+        except Exception as e:
+            print(f" An unexpected error occurred during date processing or title update for video ID {video_id}: {e}. Skipping.")
+            skipped_count += 1
+
+    print(f"\n--- Processing Summary ---")
+    print(f"Videos Processing and Updated: {processed_count}")
+    print(f"Videos Skipped (error, already dateed, or missing info): {skipped_count}")
+    print("---------------------------")
+
+if __name__ == "__main__":
+    main()

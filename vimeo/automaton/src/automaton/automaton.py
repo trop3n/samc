@@ -113,4 +113,49 @@ def update_video_title(video_id: str, new_title: str) -> bool:
         print(f"Connection error updating video title for ID {video_id}: {e}")
     return False
 
+def main():
+    """
+    Main function to orchestrate scanning Vimeo album, fetching video info,
+    and updating Vimeo video titles.
+    """
+    if VIMEO_ACCESS_TOKEN == 'e0419ec0737d3e53be6577710225629b':
+        print("ERROR: please replace your 'VIMEO_ACCESS_TOKEN' with correct token.")
+        return
+    if VIMEO_ALBUM_ID == 'YOUR_VIMEO_ALBUM_ID':
+        print("ERROR: Please replace 'YOUR_VIMEO_ALBUM_ID' with the actual ID of your Vimeo album.")
+        return
+    print(f"Starting Vimeo album processing for Album ID: {VIMEO_ALBUM_ID}")
 
+    videos_in_album = get_album_videos(VIMEO_ALBUM_ID)
+
+    if not videos_in_album:
+        print(f"No videos found in album {VIMEO_ID_ALBUM} or an error occurred. Exiting.")
+    
+    processed_count = 0
+    skipped_count = 0
+
+    for i, video_info in enumerate(videos_in_album):
+        video_uri = video_info.get('uri')
+        current_title = video_info.get('name')
+        upload_date_str = video_info.get('created_time')
+
+        if not video_uri:
+            print(f"\nVideo {i+1}: Missing URI in video info. Skipping.")
+            skipped_count += 1
+            continue
+
+        video_id = get_video_id_from_uri(video_url)
+        if not video_id:
+            print(f"\nVideo {i+1} (URI: {video_url}): Could not extract video ID from URI. SKipping.")
+            skipped_count += 1
+            continue
+        if not upload_date_str:
+            print(f" Could not retrieve upload date for video ID {video_id}. Skipping.")
+            skipped_count += 1
+            continue
+
+        print(f"Current Title: '{current_title}'")
+        print(f"Upload Data (raw): {upload_date_str}")
+
+        try: 
+            dt_object = datetime.fromisoformat(upload_date_str.replace('Z', '+00:00')) # handle 'Z' for UTC

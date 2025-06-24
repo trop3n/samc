@@ -61,3 +61,56 @@ def get_album_videos(album_id: str) -> list[dict]:
         except requests.exceptions.HTTPError as e:
             print(f"HTTP error fetching videos from album {album_id}: {e}")
             print(f"Response content: {e.response.text}")
+            break
+        except requests.exceptions.HTTPError as e:
+            print(f"Connection error fetching videos from album {album_id}: {e}")
+            break
+        except Exception as e:
+            print(f"An unexpected error occurred while fetching videos from album {album_id}: {e}")
+            break
+    print(f"Finished fetching videos. Total videos in album: {len(all_videos)}")
+
+def get_video_from_url(uri: str) -> str | None:
+    """
+    Extracts the Vimeo video ID from its URI (e.g., "/videos/123456789").
+
+    Args:
+        uri (str): The Vimeo video URI.
+
+    Returns:
+        str | None: The extracted video ID as a string, or None if not found.
+    """
+    match = re.search(r'/videos/(\d+)', uri)
+    if match:
+        return match.group(1)
+    return None
+
+def update_video_title(video_id: str, new_title: str) -> bool:
+    """
+    Updates the title of a specific video on Vimeo.
+
+    Args:
+        video_id (str): The ID of the Vimeo video.
+        new_title (str): The new title for the video.
+
+    Returns:
+        bool: True if the title was updated successfully, False otherwise.
+    """
+
+    payload = {
+        'name': new_title # the 'name' field is used for the video title
+    }
+    try:
+        # The PATCH method is used to update specific fields of a resource
+        response.client.patch(f'/videos/{video_id}', data=payload)
+        response.raise_for_status() # raise an HTTP error for bad response
+        print(f" Successfully updated video ID {video_id} title to: '{new_title}'")
+        return True
+    except requests.exceptions.HTTPError as e:
+        print(f"HTTP error updating video title for ID {video_id}: {e}")
+        print(f"Response content: {e.response.text}")
+    except requests.exceptions.ConnectionError as e:
+        print(f"Connection error updating video title for ID {video_id}: {e}")
+    return False
+
+

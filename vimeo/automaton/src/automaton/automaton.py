@@ -3,24 +3,47 @@ import requests
 from datetime import datetime
 
 try:
-    from PyVimeo import VimeoClient
+    from vimeo import VimeoClient
 except ImportError:
     print("The 'vimeo' Python library is not installed")
     print("Please install it using: pip install vimeo")
     print("Exiting script.")
     exit()
 
-VIMEO_ACCESS_TOKEN = 'e0419ec0737d3e53be6577710225629b'
-VIMEO_ALBUM_ID = '25750561'
+VIMEO_ACCESS_TOKEN = '8664fc76f459de85abd99a19345840fe'
+VIMEO_FOLDER_ID = '25750561'
 DATE_FORMAT = "%Y-%m-%d"
 
 client = VimeoClient(
     token=VIMEO_ACCESS_TOKEN,
-    key='dc7bd89bb360139476293896b2196c39dd4c56b6',
-    secret='t4o1k2fZ5m2DeQnXcAEcsoB2K7ZRuhLMReqoZGbBbniGrNBK1ZsqePKS6hZ4YQIXqfR34ZqhhSiry1O2mAlwhdDcNlFM5iNDtEfa27AbYnUk3qcJof8/+PEzK/45Lo3E'
+    key='8664fc76f459de85abd99a19345840fe',
+    secret='yNgvHKNfZPq8L8rj3baw228avZCFTzqr3LJ7M1LeeXRg9hdkPia8uBChT+NkFsV5sfXcYVT2p5vPfxQMOTbyxxMDf8JFe4priT/Nr3kpK3WkWDJNW7Ujq71lQiPGofW2'
 )
 
-def get_album_videos(album_id: str) -> list[dict]:
+def get_authenticated_user_id() -> str | None:
+    """
+    Fetches the authenticated user's ID from the Vimeo API.
+
+    Returns:
+        str | None: The user ID as a string, or None if an error occurs.
+    """
+    try:
+        response = client.get('/me')
+        response.raise_for_status()
+        user_data = response.json()
+        # The user URI Looks like /users/12345678
+        user_uri = user_data.get('uri')
+        if user_uri:
+            return user_uri.split('/')[-1]
+        print("Could not find 'uri' in '/me' response.")
+    except requests.exceptions.HTTPError as e:
+        print(f"HTTP error fetching authenticated user ID: {e}")
+        print(f"Response content: {e.response.text}")
+    except requests.exceptions.ConnectionError as e:
+        print(f"Connection Error fetching authenticated user ID: {e}")
+    return None
+
+def get_folder_videos(album_id: str) -> list[dict]:
     """
     Fetches all videos within a specific Vimeo album. Handles pagination.
 
@@ -38,9 +61,12 @@ def get_album_videos(album_id: str) -> list[dict]:
     print(f"Fetching videos from Vimeo Album ID: {album_id}")
     while True:
         try:
+            # The /albums/{album_id}/videos endpoint returns videos in an album.
+            # We're requesting basic fields: name (title), created_time (upload date), and uri (for ID).
+            # FIX: Changed 'query' to 'params' for correct parameter passing.
             response = client.get(
                 f'/album/{album_id}/videos',
-                query={'page': page, 'per_page': per_page, 'fields': 'name,created_time,uri'}
+                params={'page': page, 'per_page': per_page, 'fields': 'name,created_time,uri'}
             )
             response.raise_for_status() # Raise an HTTP error for bad responses
             data= response.json()
@@ -121,15 +147,15 @@ def main():
     if VIMEO_ACCESS_TOKEN == 'e0419ec0737d3e53be6577710225629b':
         print("ERROR: please replace your 'VIMEO_ACCESS_TOKEN' with correct token.")
         return
-    if VIMEO_ALBUM_ID == 'YOUR_VIMEO_ALBUM_ID':
+    if VIMEO_FOLDER_ID == '25750561':
         print("ERROR: Please replace 'YOUR_VIMEO_ALBUM_ID' with the actual ID of your Vimeo album.")
         return
-    print(f"Starting Vimeo album processing for Album ID: {VIMEO_ALBUM_ID}")
+    print(f"Starting Vimeo album processing for Album ID: {VIMEO_FOLDER_ID}")
 
-    videos_in_album = get_album_videos(VIMEO_ALBUM_ID)
+    videos_in_album = get_album_videos(VIMEO_FOLDER_ID) or []
 
     if not videos_in_album:
-        print(f"No videos found in album {VIMEO_ID_ALBUM} or an error occurred. Exiting.")
+        print(f"No videos found in album {VIMEO_FOLDER_ID} or an error occurred. Exiting.")
     
     processed_count = 0
     skipped_count = 0
@@ -149,6 +175,10 @@ def main():
             print(f"\nVideo {i+1} (URI: {video_url}): Could not extract video ID from URI. SKipping.")
             skipped_count += 1
             continue
+        if not current_title:
+            print(f"  Could not retrieve current title for video ID {video_id}. Skipping.")
+            skipped_count += 1
+            continue
         if not upload_date_str:
             print(f" Could not retrieve upload date for video ID {video_id}. Skipping.")
             skipped_count += 1
@@ -164,7 +194,7 @@ def main():
 
             # Check if the title already contains the date to avoid duplicates
             if formatted_date in current_title:
-                print(f "Video title already contains the date '{formatted_date}'. No update needed.")
+                print(f" Video title already contains the date '{formatted_date}'. No update needed.")
                 skipped_count += 1
                 continue
 

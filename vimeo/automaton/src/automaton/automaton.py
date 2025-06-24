@@ -149,19 +149,30 @@ def main():
     Main function to orchestrate scanning Vimeo album, fetching video info,
     and updating Vimeo video titles.
     """
-    if VIMEO_ACCESS_TOKEN == 'e0419ec0737d3e53be6577710225629b':
-        print("ERROR: please replace your 'VIMEO_ACCESS_TOKEN' with correct token.")
+    if not VIMEO_ACCESS_TOKEN:
+        print("ERROR: VIMEO_ACCESS_TOKEN is not set. Please ensure it's in your .env file.")
+        print("See instructions below for creating an .env file.")
         return
-    if VIMEO_FOLDER_ID == '25750561':
-        print("ERROR: Please replace 'YOUR_VIMEO_FOLDER_ID' with the actual ID of your Vimeo folder.")
+    if not VIMEO_FOLDER_ID:
+        print("ERROR: VIMEO_FOLDER_ID is not set. Please ensure it's in your .env file.")
         return
+
+    # Get authenticated user's ID:
+    authenticated_user_id = get_authenticated_user_id()
+    if not authenticated_user_id:
+        print("ERROR: Could not retrieve authenticated user ID. Please check your access token and its scopes.")
+        return
+
+    print(f"Authenticated User ID: {authenticated_user_id}")
     print(f"Starting Vimeo album processing for Album ID: {VIMEO_FOLDER_ID}")
 
-    videos_in_album = get_album_videos(VIMEO_FOLDER_ID) or []
+    # fetch videos from the specified folder
+    videos_in_folder = get_folder_videos(authenticated_user_id, VIMEO_FOLDER_ID) or []
 
-    if not videos_in_album:
-        print(f"No videos found in album {VIMEO_FOLDER_ID} or an error occurred. Exiting.")
-    
+    if not videos_in_folder:
+        print(f"No videos found in folder {VIMEO_FOLDER_ID} or an error occurred. Exiting.")
+        return
+        
     processed_count = 0
     skipped_count = 0
 

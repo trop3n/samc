@@ -15,10 +15,15 @@ except ImportError:
     exit()
 
 VIMEO_ACCESS_TOKEN = os.getenv('VIMEO_ACCESS_TOKEN')
-VIMEO_FOLDER_ID = os.getenv('VIMEO_FOLDER_ID')
 VIMEO_CLIENT_SECRET = os.getenv('VIMEO_CLIENT_SECRET')
 VIMEO_CLIENT_ID = os.getenv('VIMEO_CLIENT_ID')
 DATE_FORMAT = "%Y-%m-%d"
+LOOKBACK_HOURS = 48
+
+# List of folder IDs to EXCLUDE from the scan.
+# Videos within these folders will NOT be checked or updated.
+# IMPORTANT: Use string format for IDs as they are often treated as strings by APIs.
+EXCLUDED_FOLDER_IDS = ['11103430', '182762', '8219992']
 
 client = VimeoClient(
     token=VIMEO_ACCESS_TOKEN,
@@ -29,9 +34,7 @@ client = VimeoClient(
 def get_authenticated_user_id() -> str | None:
     """
     Fetches the authenticated user's ID from the Vimeo API.
-
-    Returns:
-        str | None: The user ID as a string, or None if an error occurs.
+    This is used to confirm authentication and might be needed for certain API calls.
     """
     try:
         response = client.get('/me')
@@ -51,7 +54,57 @@ def get_authenticated_user_id() -> str | None:
         print(f"An unexpected error occurred while fetching authenticated user ID: {e}")
     return None
 
-def get_folder_videos(user_id: str, folder_id: str) -> list[dict]:
+def get_user_folders(user_id: str) -> list[dict]:
+    """
+    Fetches all folders for a given user from the Vimeo API. Handles pagination.
+
+    Args:
+        user_id (str): The ID of the Vimeo user.
+
+    Returns:
+        list[dict]: A list of dictionaries, each containing folder information.
+                    Returns an empty list if an error occurs or no folders are found.
+    """
+    all_folders = []
+    page = 1
+    per_page = 100 # max allowed by Vimeo
+    
+    print(f"Fetching folders for User ID: {user_id}")
+    while True:
+        try:
+            response = client.get(
+                f'/users/{user_id}/folders',
+                params={'page': page, 'per_page': per_page, 'fields': 'uri_name'} # Request URI and name
+            )
+            response.raise_for_status()
+            data = response.json()
+            folders_on_page = data.get('data', [])
+
+            if not folders_on_page:
+                break # No more folders
+
+            all_folders.extend(folders_on_page)
+
+            if data.get('paging, {}').get('next') is None:
+                break # No 'next' page link, so this is the last page
+
+            page += 1
+            print(f" Fetched page {page-1}, total folders so far: {len(all_folders)}")
+        
+        except requests.exceptions.HTTPError as e:
+            print(f"HTTP error fetching folders: {e}")
+            print(f"Response content: {e.response.text}")
+            break
+        except requests.exceptions.ConnectionError as e:
+            print("Connection error fetching folders: {e}")
+            break
+        except Exception as e:
+            print(f"An unexpected error occurred while fetching folders: {e}")
+            break
+    print(f"Finished fetching folders. Total folders found: {len(all_folders)}")
+    return all_folders
+
+def get_get_folder_videos(since_datetime: datetime) -> list[dict]:
     """
     Fetches all videos within a specific Vimeo album. Handles pagination.
 
@@ -69,9 +122,6 @@ def get_folder_videos(user_id: str, folder_id: str) -> list[dict]:
     print(f"Fetching videos from Vimeo Folder ID: {folder_id} for User ID: {user_id}")
     while True:
         try:
-            # CORRECTED ENDPOINT: Using /users/{user_id}/folders/{folder_id}/videos for Vimeo folders.
-            # We're requesting basic fields: name (title), created_time (upload date), and uri (for ID).
-            # FIX: Changed 'query' to 'params' for correct parameter passing.
             response = client.get(
                 f'/users/{user_id}/folders/{folder_id}/videos',
                 params={'page': page, 'per_page': per_page, 'fields': 'name,created_time,uri'}
@@ -93,27 +143,20 @@ def get_folder_videos(user_id: str, folder_id: str) -> list[dict]:
             print(f"Fetched page {page-1}, total videos so far: {len(all_videos)}")
         
         except requests.exceptions.HTTPError as e:
-            print(f"HTTP error fetching videos from album {album_id}: {e}")
+            print(f"HTTP error fetching videos from folder {folder_id}: {e}")
             print(f"Response content: {e.response.text}")
             break
         except requests.exceptions.HTTPError as e:
-            print(f"Connection error fetching videos from album {album_id}: {e}")
+            print(f"Connection error fetching videos from folder {folder_id}: {e}")
             break
         except Exception as e:
             print(f"An unexpected error occurred while fetching videos from folder {folder_id}: {e}")
             break
-    print(f"Finished fetching videos. Total videos in album: {len(all_videos)}")
-    return all_videos
+    return all_videos # Do not print final total here, it's done in main for cumulative count
 
 def get_video_id_from_uri(uri: str) -> str | None:
     """
     Extracts the Vimeo video ID from its URI (e.g., "/videos/123456789").
-
-    Args:
-        uri (str): The Vimeo video URI.
-
-    Returns:
-        str | None: The extracted video ID as a string, or None if not found.
     """
     if not isinstance(uri, str) or not uri: # Explicit check if it's a non-empty string
         return None
@@ -125,13 +168,6 @@ def get_video_id_from_uri(uri: str) -> str | None:
 def update_video_title(video_id: str, new_title: str) -> bool:
     """
     Updates the title of a specific video on Vimeo.
-
-    Args:
-        video_id (str): The ID of the Vimeo video.
-        new_title (str): The new title for the video.
-
-    Returns:
-        bool: True if the title was updated successfully, False otherwise.
     """
     response = None
     payload = {
@@ -139,7 +175,7 @@ def update_video_title(video_id: str, new_title: str) -> bool:
     }
     try:
         # The PATCH method is used to update specific fields of a resource
-        response.client.patch(f'/videos/{video_id}', data=payload)
+        response = client.patch(f'/videos/{video_id}', data=payload)
         response.raise_for_status() # raise an HTTP error for bad response
         print(f" Successfully updated video ID {video_id} title to: '{new_title}'")
         return True
@@ -155,26 +191,21 @@ def update_video_title(video_id: str, new_title: str) -> bool:
 
 def main():
     """
-    Main function to orchestrate scanning Vimeo album, fetching video info,
-    and updating Vimeo video titles.
+    Main function to orchestrate scanning Vimeo Team Library (excluding specified folders)
+    for recent videos, and updating their titles.
     """
-    if not VIMEO_ACCESS_TOKEN:
-        print("ERROR: VIMEO_ACCESS_TOKEN is not set. Please ensure it's in your .env file.")
-        print("See instructions below for creating an .env file.")
-        return
-    if not VIMEO_FOLDER_ID:
-        print("ERROR: VIMEO_FOLDER_ID is not set. Please ensure it's in your .env file.")
-        print("See instructions below on how to create an .env file.")
+    if not VIMEO_ACCESS_TOKEN and not (VIMEO_CLIENT_ID and VIMEO_CLIENT_SECRET):
+        print("ERROR: Authentication credentials not found.")
+        print("Please ensure either VIMEO_ACCESS_TOKEN or both VIMEO_CLIENT_ID and VIMEO_CLIENT_SECRET are set in your .env file.")
         return
 
-    # Get authenticated user's ID:
     authenticated_user_id = get_authenticated_user_id()
     if not authenticated_user_id:
         print("ERROR: Could not retrieve authenticated user ID. Please check your access token and its scopes.")
         return
 
     print(f"Authenticated User ID: {authenticated_user_id}")
-    print(f"Starting Vimeo album processing for Album ID: {VIMEO_FOLDER_ID}")
+    print(f"Starting Vimeo Team Library processing (excluding folders: {', '.join(EXCLUDED FOLDER_IDS)}.")
 
     # fetch videos from the specified folder
     videos_in_folder = get_folder_videos(authenticated_user_id, VIMEO_FOLDER_ID) or []

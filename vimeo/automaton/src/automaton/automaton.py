@@ -15,14 +15,14 @@ except ImportError:
 
 VIMEO_ACCESS_TOKEN = os.getenv('VIMEO_ACCESS_TOKEN')
 VIMEO_FOLDER_ID = os.getenv('VIMEO_FOLDER_ID')
-VIMEO_SECRET = os.getenv('VIMEO_SECRET')
-VIMEO_KEY = os.getenv('VIMEO_KEY')
+VIMEO__CLIENT_SECRET = os.getenv('VIMEO_CLIENT_SECRET')
+VIMEO_CLIENT_ID = os.getenv('VIMEO_CLIENT_ID')
 DATE_FORMAT = "%Y-%m-%d"
 
 client = VimeoClient(
     token=VIMEO_ACCESS_TOKEN,
-    key=VIMEO_KEY,
-    secret=VIMEO_SECRET
+    key=VIMEO_CLIENT_ID,
+    secret=VIMEO_CLIENT_SECRET
 )
 
 def get_authenticated_user_id() -> str | None:
@@ -145,6 +145,8 @@ def update_video_title(video_id: str, new_title: str) -> bool:
         print(f" Response content: {e.response.text}")
     except requests.exceptions.ConnectionError as e:
         print(f" Connection error updating video title for ID {video_id}: {e}")
+    except Exception as e:
+        print(f" An unexpected error occurred while updating video title for {video_id}: {e}")
     return False
 
 def main():
@@ -158,6 +160,7 @@ def main():
         return
     if not VIMEO_FOLDER_ID:
         print("ERROR: VIMEO_FOLDER_ID is not set. Please ensure it's in your .env file.")
+        print("See instructions below on how to create an .env file.")
         return
 
     # Get authenticated user's ID:
@@ -194,15 +197,17 @@ def main():
             print(f"\nVideo {i+1} (URI: {video_url}): Could not extract video ID from URI. SKipping.")
             skipped_count += 1
             continue
+
         if not current_title:
             print(f"  Could not retrieve current title for video ID {video_id}. Skipping.")
             skipped_count += 1
             continue
+
         if not upload_date_str:
             print(f" Could not retrieve upload date for video ID {video_id}. Skipping.")
             skipped_count += 1
             continue
-
+        
         print(f"Current Title: '{current_title}'")
         print(f"Upload Data (raw): {upload_date_str}")
 

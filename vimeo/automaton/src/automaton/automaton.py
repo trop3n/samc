@@ -74,7 +74,7 @@ def get_user_folders(user_id: str) -> list[dict]:
         try:
             response = client.get(
                 f'/users/{user_id}/folders',
-                params={'page': page, 'per_page': per_page, 'fields': 'uri_name'} # Request URI and name
+                params={'page': page, 'per_page': per_page, 'fields': 'uri,name'} # Request URI and name
             )
             response.raise_for_status()
 
@@ -261,7 +261,7 @@ def main():
         folder_id = folder_info['id']
         folder_name = folder_info['name']
         print(f"Processing videos in folder: '{folder_name}' (ID: {folder_id})")
-        videos_in_current_folder = get_get_folder_videos(authenticated_user_id, folder_id) or []
+        videos_in_current_folder = get_folder_videos(authenticated_user_id, folder_id) or []
         total_videos_scanned_from_folders += len(videos_in_current_folder)
 
         # filter videos from this folder for recent uploads

@@ -77,7 +77,19 @@ def get_user_folders(user_id: str) -> list[dict]:
                 params={'page': page, 'per_page': per_page, 'fields': 'uri_name'} # Request URI and name
             )
             response.raise_for_status()
-            data = response.json()
+
+            data = None
+            try:
+                data = response.json()
+            except requests.exceptions.JSONDecodeError as json_e:
+                print(f" Error decoding JSON response for folders: {json_e}")
+                print(f" Raw response content (first 500 chars): {response.text[:500]}...")
+                break # Exit loop if JSON is malformed
+
+            if not data: # Check if data is None or empty dict/list after parsing
+                print(" Warning: No data or invalid data received in JSON response for folders.")
+                break
+
             folders_on_page = data.get('data', [])
 
             if not folders_on_page:
@@ -104,7 +116,7 @@ def get_user_folders(user_id: str) -> list[dict]:
     print(f"Finished fetching folders. Total folders found: {len(all_folders)}")
     return all_folders
 
-def get_get_folder_videos(since_datetime: datetime) -> list[dict]:
+def get_folder_videos(user_id: str, folder_id: str) -> list[dict]:
     """
     Fetches all videos within a specific Vimeo album. Handles pagination.
 
@@ -205,7 +217,7 @@ def main():
         return
 
     print(f"Authenticated User ID: {authenticated_user_id}")
-    print(f"Starting Vimeo Team Library processing (excluding folders: {', '.join(EXCLUDED_FOLDER_IDS)}.")
+    print(f"Starting Vimeo Team Library processing (excluding folders: {', '.join(EXCLUDED_FOLDER_IDS)}.)")
 
     # get all folders for the user
     all_user_folders = get_user_folders(authenticated_user_id) or []
@@ -217,8 +229,12 @@ def main():
     folders_to_scan = []
     print(f"\nFiltering folders:")
     for folder in all_user_folders:
+        if not isinstance(folder, dict):
+            print(f" Warning: Expected dictionary for folder, but get {type(folder)}: {folder}. Skipping this item.")
+            continue
+
         folder_uri = folder.get('uri')
-        folder_id = folder_uri.split('/')[-1] if folder_uri else None
+        folder_id = folder_uri.split('/')[-1] if isinstance(folder_uri, str) and folder_uri else None
         folder_name = folder.get('name', 'Unnamed Folder')
 
         if folder_id and folder_id in EXCLUDED_FOLDER_IDS:
@@ -229,8 +245,9 @@ def main():
         else:
             print(f" Skipping folder with invalid URI/ID: {folder_uri}")
 
-        if not folders_to_scan:
-            print("No folders remaining to scan after exclusion. Exiting.")
+    if not folders_to_scan:
+        print("No folders remaining to scan after exclusion. Exiting.")
+        return
 
     # Calculate the datetime for 48 hours ago
     forty_eight_hours_ago = datetime.utcnow() - timedelta(hours=LOOKBACK_HOURS)
@@ -246,11 +263,32 @@ def main():
         print(f"Processing videos in folder: '{folder_name}' (ID: {folder_id})")
         videos_in_current_folder = get_get_folder_videos(authenticated_user_id, folder_id) or []
         total_videos_scanned_from_folders += len(videos_in_current_folder)
+
+        # filter videos from this folder for recent uploads
+        for video in videos_in_current_folder:
+            created_time_str = video.get('created_time')
+            if created_time_str:
+                try:
+                    video_created_dt = datetime.fromisoformat(created_time_str.replace('Z', '+00:00'))
+                    if video_created_dt > forty_eight_hours_ago:
+                        all_recent_videos_from_scanned_folders.append(video)
+                except ValueError as e:
+                    print(f" Warning: Could not parse created_time '{created_time_str}' for video {video.get('uri', 'N/A')} in folder {folder_id}. Error: {e}")
+            else:
+                print(f" Warning: Video URI {video.get('uri', 'N/A')} in folder {folder_id} is missing 'created_time'.")
+    
+    print(f"Finished collecting videos. Total videos scanned from included folders: {total_videos_scanned_from_folders}")
+    print(f"Total recent videos found in included folders: {len(all_recent_videos_from_scanned_folders)}")
+
+    if not all_recent_videos_from_scanned_folders:
+        print(f"\nNo new videos found in the last {LOOKBACK_HOURS} hours in the included folders. Exiting.")
+        return
         
     processed_count = 0
     skipped_count = 0
-
-    for i, video_info in enumerate(videos_in_folder):
+    
+    print("\nProcessing recent videos for title updates:")
+    for i, video_info in enumerate(all_recent_videos_from_scanned_folders):
         video_uri = video_info.get('uri')
         current_title = video_info.get('name')
         upload_date_str = video_info.get('created_time')
@@ -267,6 +305,7 @@ def main():
             skipped_count += 1
             continue
 
+        print(f"\nProcessing Video {i+1} (ID: {video_id}):")
         if not current_title:
             print(f"  Could not retrieve current title for video ID {video_id}. Skipping.")
             skipped_count += 1

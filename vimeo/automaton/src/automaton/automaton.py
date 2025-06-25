@@ -1,7 +1,7 @@
 import os
 import requests
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv # import load_dotenv
 
 load_dotenv()
@@ -23,7 +23,7 @@ LOOKBACK_HOURS = 48
 # List of folder IDs to EXCLUDE from the scan.
 # Videos within these folders will NOT be checked or updated.
 # IMPORTANT: Use string format for IDs as they are often treated as strings by APIs.
-EXCLUDED_FOLDER_IDS = ['11103430', '182762', '8219992']
+EXCLUDED_FOLDER_IDS = ['11103430', '182762', '8219992', '6002849']
 
 client = VimeoClient(
     token=VIMEO_ACCESS_TOKEN,
@@ -250,7 +250,7 @@ def main():
         return
 
     # Calculate the datetime for 48 hours ago
-    forty_eight_hours_ago = datetime.utcnow() - timedelta(hours=LOOKBACK_HOURS)
+    forty_eight_hours_ago = datetime.now(timezone.UTC) - timedelta(hours=LOOKBACK_HOURS)
     print(f"\nLooking for videos uploaded in the last {LOOKBACK_HOURS} hours (since {forty_eight_hours_ago.isoformat()})")
 
     all_recent_videos_from_scanned_folders = []

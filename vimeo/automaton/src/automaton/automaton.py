@@ -205,14 +205,47 @@ def main():
         return
 
     print(f"Authenticated User ID: {authenticated_user_id}")
-    print(f"Starting Vimeo Team Library processing (excluding folders: {', '.join(EXCLUDED FOLDER_IDS)}.")
+    print(f"Starting Vimeo Team Library processing (excluding folders: {', '.join(EXCLUDED_FOLDER_IDS)}.")
 
-    # fetch videos from the specified folder
-    videos_in_folder = get_folder_videos(authenticated_user_id, VIMEO_FOLDER_ID) or []
-
-    if not videos_in_folder:
-        print(f"No videos found in folder {VIMEO_FOLDER_ID} or an error occurred. Exiting.")
+    # get all folders for the user
+    all_user_folders = get_user_folders(authenticated_user_id) or []
+    if not all_user_folders:
+        print("No folders found for the authenticated user, or an error occurred. Exiting.")
         return
+
+    # Filter excluded folders
+    folders_to_scan = []
+    print(f"\nFiltering folders:")
+    for folder in all_user_folders:
+        folder_uri = folder.get('uri')
+        folder_id = folder_uri.split('/')[-1] if folder_uri else None
+        folder_name = folder.get('name', 'Unnamed Folder')
+
+        if folder_id and folder_id in EXCLUDED_FOLDER_IDS:
+            print(f" Excluding folder: '{folder_name}' (ID: {folder_id})")
+        elif folder_id:
+            folders_to_scan.append({'id': folder_id, 'name': folder_name})
+            print(f" Including folder: '{folder_name}' (ID: {folder_id})")
+        else:
+            print(f" Skipping folder with invalid URI/ID: {folder_uri}")
+
+        if not folders_to_scan:
+            print("No folders remaining to scan after exclusion. Exiting.")
+
+    # Calculate the datetime for 48 hours ago
+    forty_eight_hours_ago = datetime.utcnow() - timedelta(hours=LOOKBACK_HOURS)
+    print(f"\nLooking for videos uploaded in the last {LOOKBACK_HOURS} hours (since {forty_eight_hours_ago.isoformat()})")
+
+    all_recent_videos_from_scanned_folders = []
+    total_videos_scanned_from_folders = 0
+
+    print("\nCollecting videos from included folders:")
+    for folder_info in folders_to_scan:
+        folder_id = folder_info['id']
+        folder_name = folder_info['name']
+        print(f"Processing videos in folder: '{folder_name}' (ID: {folder_id})")
+        videos_in_current_folder = get_get_folder_videos(authenticated_user_id, folder_id) or []
+        total_videos_scanned_from_folders += len(videos_in_current_folder)
         
     processed_count = 0
     skipped_count = 0

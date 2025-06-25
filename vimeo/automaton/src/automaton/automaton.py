@@ -46,6 +46,8 @@ def get_authenticated_user_id() -> str | None:
         print(f"Response content: {e.response.text}")
     except requests.exceptions.ConnectionError as e:
         print(f"Connection Error fetching authenticated user ID: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred while fetching authenticated user ID: {e}")
     return None
 
 def get_folder_videos(album_id: str) -> list[dict]:

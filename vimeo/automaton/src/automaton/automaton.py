@@ -50,7 +50,7 @@ def get_authenticated_user_id() -> str | None:
         print(f"An unexpected error occurred while fetching authenticated user ID: {e}")
     return None
 
-def get_folder_videos(album_id: str) -> list[dict]:
+def get_folder_videos(user_id: str, folder_id: str) -> list[dict]:
     """
     Fetches all videos within a specific Vimeo album. Handles pagination.
 
@@ -65,7 +65,7 @@ def get_folder_videos(album_id: str) -> list[dict]:
     page = 1
     per_page = 100
 
-    print(f"Fetching videos from Vimeo Folder ID: {folder_id}")
+    print(f"Fetching videos from Vimeo Folder ID: {folder_id} for User ID: {user_id}")
     while True:
         try:
             # CORRECTED ENDPOINT: Using /users/{user_id}/folders/{folder_id}/videos for Vimeo folders.
@@ -99,9 +99,10 @@ def get_folder_videos(album_id: str) -> list[dict]:
             print(f"Connection error fetching videos from album {album_id}: {e}")
             break
         except Exception as e:
-            print(f"An unexpected error occurred while fetching videos from album {album_id}: {e}")
+            print(f"An unexpected error occurred while fetching videos from folder {folder_id}: {e}")
             break
     print(f"Finished fetching videos. Total videos in album: {len(all_videos)}")
+    return all_videos
 
 def get_video_from_url(uri: str) -> str | None:
     """
@@ -140,10 +141,10 @@ def update_video_title(video_id: str, new_title: str) -> bool:
         print(f" Successfully updated video ID {video_id} title to: '{new_title}'")
         return True
     except requests.exceptions.HTTPError as e:
-        print(f"HTTP error updating video title for ID {video_id}: {e}")
-        print(f"Response content: {e.response.text}")
+        print(f" HTTP error updating video title for ID {video_id}: {e}")
+        print(f" Response content: {e.response.text}")
     except requests.exceptions.ConnectionError as e:
-        print(f"Connection error updating video title for ID {video_id}: {e}")
+        print(f" Connection error updating video title for ID {video_id}: {e}")
     return False
 
 def main():

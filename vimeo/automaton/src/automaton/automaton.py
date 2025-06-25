@@ -1,5 +1,6 @@
 import os
 import requests
+import re
 from datetime import datetime
 from dotenv import load_dotenv # import load_dotenv
 
@@ -15,7 +16,7 @@ except ImportError:
 
 VIMEO_ACCESS_TOKEN = os.getenv('VIMEO_ACCESS_TOKEN')
 VIMEO_FOLDER_ID = os.getenv('VIMEO_FOLDER_ID')
-VIMEO__CLIENT_SECRET = os.getenv('VIMEO_CLIENT_SECRET')
+VIMEO_CLIENT_SECRET = os.getenv('VIMEO_CLIENT_SECRET')
 VIMEO_CLIENT_ID = os.getenv('VIMEO_CLIENT_ID')
 DATE_FORMAT = "%Y-%m-%d"
 
@@ -104,7 +105,7 @@ def get_folder_videos(user_id: str, folder_id: str) -> list[dict]:
     print(f"Finished fetching videos. Total videos in album: {len(all_videos)}")
     return all_videos
 
-def get_video_from_url(uri: str) -> str | None:
+def get_video_id_from_uri(uri: str) -> str | None:
     """
     Extracts the Vimeo video ID from its URI (e.g., "/videos/123456789").
 
@@ -114,6 +115,8 @@ def get_video_from_url(uri: str) -> str | None:
     Returns:
         str | None: The extracted video ID as a string, or None if not found.
     """
+    if not isinstance(uri, str) or not uri: # Explicit check if it's a non-empty string
+        return None
     match = re.search(r'/videos/(\d+)', uri)
     if match:
         return match.group(1)
@@ -130,7 +133,7 @@ def update_video_title(video_id: str, new_title: str) -> bool:
     Returns:
         bool: True if the title was updated successfully, False otherwise.
     """
-
+    response = None
     payload = {
         'name': new_title # the 'name' field is used for the video title
     }
@@ -142,7 +145,8 @@ def update_video_title(video_id: str, new_title: str) -> bool:
         return True
     except requests.exceptions.HTTPError as e:
         print(f" HTTP error updating video title for ID {video_id}: {e}")
-        print(f" Response content: {e.response.text}")
+        if e.response is not None:
+            print(f" Response content: {e.response.text}")
     except requests.exceptions.ConnectionError as e:
         print(f" Connection error updating video title for ID {video_id}: {e}")
     except Exception as e:
@@ -182,7 +186,7 @@ def main():
     processed_count = 0
     skipped_count = 0
 
-    for i, video_info in enumerate(videos_in_album):
+    for i, video_info in enumerate(videos_in_folder):
         video_uri = video_info.get('uri')
         current_title = video_info.get('name')
         upload_date_str = video_info.get('created_time')
@@ -192,9 +196,10 @@ def main():
             skipped_count += 1
             continue
 
-        video_id = get_video_id_from_uri(video_url)
+        video_id = get_video_id_from_uri(video_uri)
+
         if not video_id:
-            print(f"\nVideo {i+1} (URI: {video_url}): Could not extract video ID from URI. SKipping.")
+            print(f"\nVideo {i+1} (URI: {video_uri}): Could not extract video ID from URI. Skipping.")
             skipped_count += 1
             continue
 
@@ -213,7 +218,7 @@ def main():
 
         try: 
             dt_object = datetime.fromisoformat(upload_date_str.replace('Z', '+00:00')) # handle 'Z' for UTC
-            formatted_date = dt.object.strftime(DATE_FORMAT)
+            formatted_date = dt_object.strftime(DATE_FORMAT)
             print(f" Formatted Date: {formatted_date}")
 
             # Check if the title already contains the date to avoid duplicates

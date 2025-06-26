@@ -54,27 +54,31 @@ def get_authenticated_user_id() -> str | None:
         print(f"An unexpected error occurred while fetching authenticated user ID: {e}")
     return None
 
-def get_user_folders(user_id: str) -> list[dict]:
+def get_all_user_videos() -> str | None:
     """
-    Fetches all folders for a given user from the Vimeo API. Handles pagination.
-
-    Args:
-        user_id (str): The ID of the Vimeo user.
+    Fetches all videos from the authenticated user's entire library. Handles pagination.
+    Included parent_folder.uri to enable folder exclusion.
 
     Returns:
-        list[dict]: A list of dictionaries, each containing folder information.
-                    Returns an empty list if an error occurs or no folders are found.
+        list[dict]: A list of dictionaries, each containing video information.
+                    Returns an empty list if an error occurs or no videos are found.
     """
-    all_folders = []
+    all_videos = []
     page = 1
-    per_page = 100 # max allowed by Vimeo
-    
-    print(f"Fetching folders for User ID: {user_id}")
+    per_page = 100 # Maximum allowed by Vimeo
+
+    print(f"Fetching all videos from your Team Library.")
     while True:
         try:
+            # using /me/videos to get all videos for the authenticated user
+            # Requesting 'name', 'created_time', 'uri', and 'parent_folder.uri' fields\
             response = client.get(
-                f'/users/{user_id}/folders',
-                params={'page': page, 'per_page': per_page, 'fields': 'uri,name'} # Request URI and name
+                '/me/videos',
+                params={
+                    'page': page,
+                    'per_page': per_page,
+                    'fields': 'name,created_time,uri,parent_folder.uri' # added parent_folder.uri
+                }
             )
             response.raise_for_status()
 
@@ -82,89 +86,157 @@ def get_user_folders(user_id: str) -> list[dict]:
             try:
                 data = response.json()
             except requests.exceptions.JSONDecodeError as json_e:
-                print(f" Error decoding JSON response for folders: {json_e}")
-                print(f" Raw response content (first 500 chars): {response.text[:500]}...")
+                print(f" Error decoding JSON response for videos: {json_e}")
+                if response is not None:
+                    print(f" Raw response content (first 500 chars): {response.text[:500]}...")
                 break # Exit loop if JSON is malformed
 
             if not data: # Check if data is None or empty dict/list after parsing
-                print(" Warning: No data or invalid data received in JSON response for folders.")
+                print(" Warning: No data or invalid data received in JSON response for videos.")
                 break
 
-            folders_on_page = data.get('data', [])
-
-            if not folders_on_page:
-                break # No more folders
-
-            all_folders.extend(folders_on_page)
-
-            if data.get('paging, {}').get('next') is None:
-                break # No 'next' page link, so this is the last page
-
-            page += 1
-            print(f" Fetched page {page-1}, total folders so far: {len(all_folders)}")
-        
-        except requests.exceptions.HTTPError as e:
-            print(f"HTTP error fetching folders: {e}")
-            print(f"Response content: {e.response.text}")
-            break
-        except requests.exceptions.ConnectionError as e:
-            print("Connection error fetching folders: {e}")
-            break
-        except Exception as e:
-            print(f"An unexpected error occurred while fetching folders: {e}")
-            break
-    print(f"Finished fetching folders. Total folders found: {len(all_folders)}")
-    return all_folders
-
-def get_folder_videos(user_id: str, folder_id: str) -> list[dict]:
-    """
-    Fetches all videos within a specific Vimeo album. Handles pagination.
-
-    Args:
-        user_id (str): The ID of the Vimeo user who owns the folder.
-        folder_id (str): The ID of the Vimeo folder.
-    Returns:
-        list[dict]: A list of dictionaries, each containing video information.
-                    Returns an empty list if an error occurs or no videos are found.
-    """
-    all_videos = []
-    page = 1
-    per_page = 100
-
-    print(f"Fetching videos from Vimeo Folder ID: {folder_id} for User ID: {user_id}")
-    while True:
-        try:
-            response = client.get(
-                f'/users/{user_id}/folders/{folder_id}/videos',
-                params={'page': page, 'per_page': per_page, 'fields': 'name,created_time,uri'}
-            )
-            response.raise_for_status() # Raise an HTTP error for bad responses
-            data= response.json()
             videos_on_page = data.get('data', [])
+            if not isinstance(videos_on_page, list):
+                print(f" Warning: Expected 'data field to be a list, but got {type(videos_on_page)}. Skipping.")
+                break # Break if 'data' field isn't a list of videos
 
             if not videos_on_page:
-                break # no more videos
+                break # No more videos
 
             all_videos.extend(videos_on_page)
 
-            # check for more pages
-            if data.get('paging', {}).get('next') is None:
-                break # last page or fewer than per_page items
+            # Check if there are more pages based on Vimeo's 'next' link
+            if data.get('paging', {}).get('next') is None: 
+                break # No 'next' page link, so this is the last page
 
             page += 1
-            print(f"Fetched page {page-1}, total videos so far: {len(all_videos)}")
-        
+            print(f" Fetched page {page-1}, total videos so far: {len(all_videos)}")
+
         except requests.exceptions.HTTPError as e:
-            print(f"HTTP error fetching videos from folder {folder_id}: {e}")
-            print(f"Response content: {e.response.text}")
+            print(f"HTTP error fetching videos: {e}")
+            if e.response is not None:
+                print(f"Response content: {e.response.text}")
             break
-        except requests.exceptions.HTTPError as e:
-            print(f"Connection error fetching videos from folder {folder_id}: {e}")
+        except requests.exceptions.ConnectionError as e:
+            print(f"Connection error fetching videos: {e}")
             break
         except Exception as e:
-            print(f"An unexpected error occurred while fetching videos from folder {folder_id}: {e}")
+            print(f"An unexpected error occured while fetching videos: {e}")
             break
-    return all_videos # Do not print final total here, it's done in main for cumulative count
+    print(f"Finished fetching videos. Total videos found in Team Library: {len(all_videos)}")
+    return all_videos
+    
+# def get_user_folders(user_id: str) -> list[dict]:
+#     """
+#     Fetches all folders for a given user from the Vimeo API. Handles pagination.
+
+#     Args:
+#         user_id (str): The ID of the Vimeo user.
+
+#     Returns:
+#         list[dict]: A list of dictionaries, each containing folder information.
+#                     Returns an empty list if an error occurs or no folders are found.
+#     """
+#     all_folders = []
+#     page = 1
+#     per_page = 100 # max allowed by Vimeo
+    
+#     print(f"Fetching folders for User ID: {user_id}")
+#     while True:
+#         try:
+#             response = client.get(
+#                 f'/users/{user_id}/folders',
+#                 params={'page': page, 'per_page': per_page, 'fields': 'uri,name'} # Request URI and name
+#             )
+#             response.raise_for_status()
+
+#             data = None
+#             try:
+#                 data = response.json()
+#             except requests.exceptions.JSONDecodeError as json_e:
+#                 print(f" Error decoding JSON response for folders: {json_e}")
+#                 print(f" Raw response content (first 500 chars): {response.text[:500]}...")
+#                 break # Exit loop if JSON is malformed
+
+#             if not data: # Check if data is None or empty dict/list after parsing
+#                 print(" Warning: No data or invalid data received in JSON response for folders.")
+#                 break
+
+#             folders_on_page = data.get('data', [])
+
+#             if not folders_on_page:
+#                 break # No more folders
+
+#             all_folders.extend(folders_on_page)
+
+#             if data.get('paging, {}').get('next') is None:
+#                 break # No 'next' page link, so this is the last page
+
+#             page += 1
+#             print(f" Fetched page {page-1}, total folders so far: {len(all_folders)}")
+        
+#         except requests.exceptions.HTTPError as e:
+#             print(f"HTTP error fetching folders: {e}")
+#             print(f"Response content: {e.response.text}")
+#             break
+#         except requests.exceptions.ConnectionError as e:
+#             print("Connection error fetching folders: {e}")
+#             break
+#         except Exception as e:
+#             print(f"An unexpected error occurred while fetching folders: {e}")
+#             break
+#     print(f"Finished fetching folders. Total folders found: {len(all_folders)}")
+#     return all_folders
+
+# def get_folder_videos(user_id: str, folder_id: str) -> list[dict]:
+#     """
+#     Fetches all videos within a specific Vimeo album. Handles pagination.
+
+#     Args:
+#         user_id (str): The ID of the Vimeo user who owns the folder.
+#         folder_id (str): The ID of the Vimeo folder.
+#     Returns:
+#         list[dict]: A list of dictionaries, each containing video information.
+#                     Returns an empty list if an error occurs or no videos are found.
+#     """
+#     all_videos = []
+#     page = 1
+#     per_page = 100
+
+#     print(f"Fetching videos from Vimeo Folder ID: {folder_id} for User ID: {user_id}")
+#     while True:
+#         try:
+#             response = client.get(
+#                 f'/users/{user_id}/folders/{folder_id}/videos',
+#                 params={'page': page, 'per_page': per_page, 'fields': 'name,created_time,uri'}
+#             )
+#             response.raise_for_status() # Raise an HTTP error for bad responses
+#             data= response.json()
+#             videos_on_page = data.get('data', [])
+
+#             if not videos_on_page:
+#                 break # no more videos
+
+#             all_videos.extend(videos_on_page)
+
+#             # check for more pages
+#             if data.get('paging', {}).get('next') is None:
+#                 break # last page or fewer than per_page items
+
+#             page += 1
+#             print(f"Fetched page {page-1}, total videos so far: {len(all_videos)}")
+        
+#         except requests.exceptions.HTTPError as e:
+#             print(f"HTTP error fetching videos from folder {folder_id}: {e}")
+#             print(f"Response content: {e.response.text}")
+#             break
+#         except requests.exceptions.HTTPError as e:
+#             print(f"Connection error fetching videos from folder {folder_id}: {e}")
+#             break
+#         except Exception as e:
+#             print(f"An unexpected error occurred while fetching videos from folder {folder_id}: {e}")
+#             break
+#     return all_videos # Do not print final total here, it's done in main for cumulative count
 
 def get_video_id_from_uri(uri: str) -> str | None:
     """
@@ -250,7 +322,7 @@ def main():
         return
 
     # Calculate the datetime for 48 hours ago
-    forty_eight_hours_ago = datetime.now(timezone.UTC) - timedelta(hours=LOOKBACK_HOURS)
+    forty_eight_hours_ago = datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)
     print(f"\nLooking for videos uploaded in the last {LOOKBACK_HOURS} hours (since {forty_eight_hours_ago.isoformat()})")
 
     all_recent_videos_from_scanned_folders = []

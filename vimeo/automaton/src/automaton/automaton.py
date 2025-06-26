@@ -249,6 +249,17 @@ def get_video_id_from_uri(uri: str) -> str | None:
         return match.group(1)
     return None
 
+def get_folder_id_from_uri(folder_uri: str | None) -> str | None:
+    """
+    Extracts the Vimeo folder ID from its URI (e.g. "/folders/123456789")
+    """
+    if not isinstance(folder_uri, str) or not folder_uri:
+        return None
+    match = re.search(r'/folders/(\d+)', folder_uri)
+    if match:
+        return match.group(1)
+    return None
+    
 def update_video_title(video_id: str, new_title: str) -> bool:
     """
     Updates the title of a specific video on Vimeo.
@@ -308,7 +319,7 @@ def main():
 
     print(f"\nFiltering videos based on upload time and excluded folders:")
     for i, video_info in enumerate(all_user_videos):
-        video_uri = video.info.get('uri')
+        video_uri = video_info.get('uri')
         upload_date_str = video_info.get('created_time')
         parent_folder_info = video_info.get('parent_folder') # This is a dict if video is in a folder
 

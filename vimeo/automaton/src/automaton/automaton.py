@@ -23,7 +23,7 @@ LOOKBACK_HOURS = 48
 # List of folder IDs to EXCLUDE from the scan.
 # Videos within these folders will NOT be checked or updated.
 # IMPORTANT: Use string format for IDs as they are often treated as strings by APIs.
-EXCLUDED_FOLDER_IDS = ['11103430', '182762', '8219992', '6002849']
+EXCLUDED_FOLDER_IDS = ['11103430', '8219992', '6002849']
 
 client = VimeoClient(
     token=VIMEO_ACCESS_TOKEN,
@@ -125,7 +125,7 @@ def get_all_user_videos() -> str | None:
             break
     print(f"Finished fetching videos. Total videos found in Team Library: {len(all_videos)}")
     return all_videos
-    
+
 # def get_user_folders(user_id: str) -> list[dict]:
 #     """
 #     Fetches all folders for a given user from the Vimeo API. Handles pagination.
@@ -290,6 +290,35 @@ def main():
 
     print(f"Authenticated User ID: {authenticated_user_id}")
     print(f"Starting Vimeo Team Library processing (excluding folders: {', '.join(EXCLUDED_FOLDER_IDS)}.)")
+
+    # Calculate the datetime for lookback period
+    forty_eight_hours_ago = datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)
+    print(f"\nLooking for videos uploaded in the last {LOOKBACK_HOURS} hours (since {forty_eight_hours_ago.isoformat()}).")
+
+    # fetch all videos from the user's library with parent folder info
+    all_user_videos = get_all_user_videos() or []
+
+    if not all_user_videos:
+        print("No videos found in your Team Library, or an error occured. Exiting.")
+        return
+
+    videos_to_process = []
+    skipped_by_folder_count = 0
+    skipped_by_time_count = 0
+
+    print(f"\nFiltering videos based on upload time and excluded folders:")
+    for i, video_info in enumerate(all_user_videos):
+        video_uri = video.info.get('uri')
+        upload_date_str = video_info.get('created_time')
+        parent_folder_info = video_info.get('parent_folder') # This is a dict if video is in a folder
+
+        video_id = get_video_id_from_uri(video_uri)
+        if not video_id:
+            print(f" Warning: Video {i+1} missing URI or could not extract ID. Skipping.")
+            continue # Skip if video ID cannot be determined
+
+        # 1. Check if video is in an excluded folder
+        
 
     # get all folders for the user
     all_user_folders = get_user_folders(authenticated_user_id) or []

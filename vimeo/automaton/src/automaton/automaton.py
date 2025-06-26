@@ -425,5 +425,5 @@ def main():
     print(f"Videos Skipped (during update): {skipped_count_during_update}")
     print("---------------------------")
 
-    if __name__ == '__main__':
-        main()
+if __name__ == '__main__':
+    main()

@@ -318,7 +318,45 @@ def main():
             continue # Skip if video ID cannot be determined
 
         # 1. Check if video is in an excluded folder
+        is_excluded_folder = False
+        if parent_folder_info and isinstance(parent_folder_info, dict):
+            parent_folder_uri = parent_folder_info.get('uri')
+            folder_id = get_folder_id_from_uri(parent_folder_uri)
+            if folder_id and folder_id in EXCLUDED_FOLDER_IDS:
+                print(f" Video ID {video_id} is in excluded folder ID {folder_id}. Skipping.")
+                is_excluded_folder = True
+                skipped_by_folder_count += 1
+        # Handle videos not in any folder (parent_folder might be None)
+        elif parent_folder_info is None:
+            # If a video is not in any folder, it effectively passes the folder exclusion check:
+            pass
+        else:
+            print(f" Warning: Video ID {video_id} has unexpected parent_folder type: {type(parent_folder_info)}. Not excluding folder based on this.")
         
+        if is_excluded_folder:
+            continue # Skip this video if its folder is excluded
+
+        # 2. Check upload time (only for videos not in excluded folders)
+        if upload_date_str:
+            try:
+                video_created_dt = datetime.fromisoformat(upload_date_str.replace('Z', '+00:00'))
+                if video_created_dt.tzinfo is None:
+                    video_created_dt = video_created_dt.replace(tzinfo=timezeone.utc)
+
+                if video_created_dt > forty_eight_hours_ago:
+                    videos_to_process.append(video_info)
+                else:
+                    print(f" Video ID {video_id} uploaded too long ago ({formatted_date if 'formatted_date' in locals() else 'N/A'}). Skipping by time.")
+                    skipped_by_time_count += 1
+            except ValueError as e:
+                print(f" Warning: Could not parse created_time '{upload_date_str}' for video ID {video_ID}. Error {e}. Skipping.")
+        else:
+            print(f" Warning Video ID {video_ID} is missing 'created_time'. Skipping.")
+        
+    print(f"\nFinished filtering. Total videos selected for processing: {len(videos_to_process)}")
+    print(f" Skipped by excluded folder: {skipped_by_folder_count} videos")
+    print(f" Skipped by upload time (older than {LOOKBACK_HOURS} hours): {skipped_by_time_count} videos")
+    
 
     # get all folders for the user
     all_user_folders = get_user_folders(authenticated_user_id) or []

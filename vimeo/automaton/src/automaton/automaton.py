@@ -54,29 +54,37 @@ def get_authenticated_user_id() -> str | None:
         print(f"An unexpected error occurred while fetching authenticated user ID: {e}")
     return None
 
-def get_all_user_videos() -> str | None:
+def get_recent_videos_with_folder_info(since_datetime: datetime) -> list[dict]:
     """
-    Fetches all videos from the authenticated user's entire library. Handles pagination.
-    Included parent_folder.uri to enable folder exclusion.
+    Fetches videos from the authenticated user's entire library that were
+    uploaded after the specified datetime. It optimizes by stopping pagination
+    once videos older than 'since_datetime' are encountered.
+    Includes parent_folder.uri to enable folder exclusion later.
+
+    Args:
+        since_datetime (datetime): Only videos uploaded after this time will be considered.
 
     Returns:
-        list[dict]: A list of dictionaries, each containing video information.
-                    Returns an empty list if an error occurs or no videos are found.
+        list[dict]: A list of dictionaries, each containing recent video information
+                    including parent_folder.uri. Returns an empty list if an error occurs or no videos are found.
     """
-    all_videos = []
+    all_recent_videos = []
     page = 1
     per_page = 100 # Maximum allowed by Vimeo
 
-    print(f"Fetching all videos from your Team Library.")
+    print(f"Fetching all videos from your Team Library uploaded since {since_datetime.isoformat()} (optimizing by date).")
     while True:
         try:
             # using /me/videos to get all videos for the authenticated user
-            # Requesting 'name', 'created_time', 'uri', and 'parent_folder.uri' fields\
+            # Sorting by 'date' in 'desc' order to enable early exit
+            # Requesting 'name', 'created_time', 'uri', and 'parent_folder.uri' fields
             response = client.get(
                 '/me/videos',
                 params={
                     'page': page,
                     'per_page': per_page,
+                    'sort': 'date', # sort by creation date
+                    'direction': 'desc', # Newest first
                     'fields': 'name,created_time,uri,parent_folder.uri' # added parent_folder.uri
                 }
             )
@@ -103,14 +111,36 @@ def get_all_user_videos() -> str | None:
             if not videos_on_page:
                 break # No more videos
 
-            all_videos.extend(videos_on_page)
+            found_recent_on_page = False
+            for video in videos_on_page:
+                created_time_str = video.get('created_time')
+                if created_time_str:
+                    try:
+                        video_created_dt = datetime.fromisoformat(created_time_str.replace('Z', '+00:00'))
+                        if video_created_dt.tzinfo is None:
+                            video_created_dt = video_created_dt.replace(tzinfo=timezone.utc) # Make it timezone-aware
+
+                        if video_created_dt > since_datetime:
+                            all_recent_videos.append(video)
+                            found_recent_on_page = True
+                        else:
+                            # If we encounter a video older than our threshold (since Vimeo returns newest first),
+                            # we can stop fetching more pages.
+                            print(f" Encountered Video ID {get_video_id_from_uri(video.get('uri'))} older than {since_datetime.isoformat()}. Stopping pagination.")
+                            return all_recent_videos # Early exit!
+                    except ValueError as e:
+                        print(f" Warning: Could not parse created_time '{created_time_str}' for video {video.get('uri', 'N/A')}. Error: {e}")
+                else:
+                    print(f" Warning: Video URI {video.get('uri', 'N/A')} is missing 'created_time'.")
 
             # Check if there are more pages based on Vimeo's 'next' link
-            if data.get('paging', {}).get('next') is None: 
-                break # No 'next' page link, so this is the last page
+            # If we didn't find any recent videos on this page, and it's not the first page,
+            # it implies we've already processed all recent ones or there are none left.
+            if data.get('paging', {}).get('next') is None or not found_recent_on_page:
+                break 
 
             page += 1
-            print(f" Fetched page {page-1}, total videos so far: {len(all_videos)}")
+            print(f" Fetched page {page-1}, total videos so far: {len(all_recent_videos)}")
 
         except requests.exceptions.HTTPError as e:
             print(f"HTTP error fetching videos: {e}")
@@ -123,120 +153,8 @@ def get_all_user_videos() -> str | None:
         except Exception as e:
             print(f"An unexpected error occured while fetching videos: {e}")
             break
-    print(f"Finished fetching videos. Total videos found in Team Library: {len(all_videos)}")
-    return all_videos
-
-# def get_user_folders(user_id: str) -> list[dict]:
-#     """
-#     Fetches all folders for a given user from the Vimeo API. Handles pagination.
-
-#     Args:
-#         user_id (str): The ID of the Vimeo user.
-
-#     Returns:
-#         list[dict]: A list of dictionaries, each containing folder information.
-#                     Returns an empty list if an error occurs or no folders are found.
-#     """
-#     all_folders = []
-#     page = 1
-#     per_page = 100 # max allowed by Vimeo
-    
-#     print(f"Fetching folders for User ID: {user_id}")
-#     while True:
-#         try:
-#             response = client.get(
-#                 f'/users/{user_id}/folders',
-#                 params={'page': page, 'per_page': per_page, 'fields': 'uri,name'} # Request URI and name
-#             )
-#             response.raise_for_status()
-
-#             data = None
-#             try:
-#                 data = response.json()
-#             except requests.exceptions.JSONDecodeError as json_e:
-#                 print(f" Error decoding JSON response for folders: {json_e}")
-#                 print(f" Raw response content (first 500 chars): {response.text[:500]}...")
-#                 break # Exit loop if JSON is malformed
-
-#             if not data: # Check if data is None or empty dict/list after parsing
-#                 print(" Warning: No data or invalid data received in JSON response for folders.")
-#                 break
-
-#             folders_on_page = data.get('data', [])
-
-#             if not folders_on_page:
-#                 break # No more folders
-
-#             all_folders.extend(folders_on_page)
-
-#             if data.get('paging, {}').get('next') is None:
-#                 break # No 'next' page link, so this is the last page
-
-#             page += 1
-#             print(f" Fetched page {page-1}, total folders so far: {len(all_folders)}")
-        
-#         except requests.exceptions.HTTPError as e:
-#             print(f"HTTP error fetching folders: {e}")
-#             print(f"Response content: {e.response.text}")
-#             break
-#         except requests.exceptions.ConnectionError as e:
-#             print("Connection error fetching folders: {e}")
-#             break
-#         except Exception as e:
-#             print(f"An unexpected error occurred while fetching folders: {e}")
-#             break
-#     print(f"Finished fetching folders. Total folders found: {len(all_folders)}")
-#     return all_folders
-
-# def get_folder_videos(user_id: str, folder_id: str) -> list[dict]:
-#     """
-#     Fetches all videos within a specific Vimeo album. Handles pagination.
-
-#     Args:
-#         user_id (str): The ID of the Vimeo user who owns the folder.
-#         folder_id (str): The ID of the Vimeo folder.
-#     Returns:
-#         list[dict]: A list of dictionaries, each containing video information.
-#                     Returns an empty list if an error occurs or no videos are found.
-#     """
-#     all_videos = []
-#     page = 1
-#     per_page = 100
-
-#     print(f"Fetching videos from Vimeo Folder ID: {folder_id} for User ID: {user_id}")
-#     while True:
-#         try:
-#             response = client.get(
-#                 f'/users/{user_id}/folders/{folder_id}/videos',
-#                 params={'page': page, 'per_page': per_page, 'fields': 'name,created_time,uri'}
-#             )
-#             response.raise_for_status() # Raise an HTTP error for bad responses
-#             data= response.json()
-#             videos_on_page = data.get('data', [])
-
-#             if not videos_on_page:
-#                 break # no more videos
-
-#             all_videos.extend(videos_on_page)
-
-#             # check for more pages
-#             if data.get('paging', {}).get('next') is None:
-#                 break # last page or fewer than per_page items
-
-#             page += 1
-#             print(f"Fetched page {page-1}, total videos so far: {len(all_videos)}")
-        
-#         except requests.exceptions.HTTPError as e:
-#             print(f"HTTP error fetching videos from folder {folder_id}: {e}")
-#             print(f"Response content: {e.response.text}")
-#             break
-#         except requests.exceptions.HTTPError as e:
-#             print(f"Connection error fetching videos from folder {folder_id}: {e}")
-#             break
-#         except Exception as e:
-#             print(f"An unexpected error occurred while fetching videos from folder {folder_id}: {e}")
-#             break
-#     return all_videos # Do not print final total here, it's done in main for cumulative count
+    print(f"Finished fetching videos. Total videos found in Team Library: {len(all_recent_videos)}")
+    return all_recent_videos
 
 def get_video_id_from_uri(uri: str) -> str | None:
     """
@@ -307,20 +225,18 @@ def main():
     print(f"\nLooking for videos uploaded in the last {LOOKBACK_HOURS} hours (since {forty_eight_hours_ago.isoformat()}).")
 
     # fetch all videos from the user's library with parent folder info
-    all_user_videos = get_all_user_videos() or []
+    recent_videos_from_api = get_recent_videos_with_folder_info(forty_eight_hours_ago) or []
 
-    if not all_user_videos:
-        print("No videos found in your Team Library, or an error occured. Exiting.")
+    if not recent_videos_from_api:
+        print("No recent videos found in your Team Library within the last {LOOKBACK_HOURS} hours, or an error occurred. Exiting.")
         return
 
     videos_to_process = []
     skipped_by_folder_count = 0
-    skipped_by_time_count = 0
 
     print(f"\nFiltering videos based on upload time and excluded folders:")
-    for i, video_info in enumerate(all_user_videos):
+    for i, video_info in enumerate(recent_videos_from_api):
         video_uri = video_info.get('uri')
-        upload_date_str = video_info.get('created_time')
         parent_folder_info = video_info.get('parent_folder') # This is a dict if video is in a folder
 
         video_id = get_video_id_from_uri(video_uri)
@@ -347,33 +263,17 @@ def main():
         if is_excluded_folder:
             continue # Skip this video if its folder is excluded
 
-        # 2. Check upload time (only for videos not in excluded folders)
-        if upload_date_str:
-            try:
-                video_created_dt = datetime.fromisoformat(upload_date_str.replace('Z', '+00:00'))
-                if video_created_dt.tzinfo is None:
-                    video_created_dt = video_created_dt.replace(tzinfo=timezeone.utc)
+        videos_to_process.append(video_info) # Add to list if not excluded by folder
 
-                if video_created_dt > forty_eight_hours_ago:
-                    videos_to_process.append(video_info)
-                else:
-                    print(f" Video ID {video_id} uploaded too long ago ({formatted_date if 'formatted_date' in locals() else 'N/A'}). Skipping by time.")
-                    skipped_by_time_count += 1
-            except ValueError as e:
-                print(f" Warning: Could not parse created_time '{upload_date_str}' for video ID {video_ID}. Error {e}. Skipping.")
-        else:
-            print(f" Warning Video ID {video_ID} is missing 'created_time'. Skipping.")
-        
-    print(f"\nFinished filtering. Total videos selected for processing: {len(videos_to_process)}")
-    print(f" Skipped by excluded folder: {skipped_by_folder_count} videos")
-    print(f" Skipped by upload time (older than {LOOKBACK_HOURS} hours): {skipped_by_time_count} videos")
+    print(f"\nFinished filtering by folder. Total videos selected for processing: {len(videos_to_process)}")
+    print(f" Skipped due to being in an excluded folder: {skipped_by_folder_count} videos")
 
     if not videos_to_process:
-        print(f"\nNo recent videos found matching criteria. Exiting.")
+        print(f"\nNo recent videos found matching criteria after folder exclusion. Exiting.")
         return
 
     processed_count = 0
-    skipped_count_during_update = 0 # Renamed for clarity, avoiding conflict with skipped_by_... counts
+    skipped_count_during_update = 0
 
     print("\nProcessing filtered videos for title updates:")
     for i, video_info in enumerate(videos_to_process):

@@ -356,117 +356,53 @@ def main():
     print(f"\nFinished filtering. Total videos selected for processing: {len(videos_to_process)}")
     print(f" Skipped by excluded folder: {skipped_by_folder_count} videos")
     print(f" Skipped by upload time (older than {LOOKBACK_HOURS} hours): {skipped_by_time_count} videos")
-    
 
-    # get all folders for the user
-    all_user_folders = get_user_folders(authenticated_user_id) or []
-    if not all_user_folders:
-        print("No folders found for the authenticated user, or an error occurred. Exiting.")
+    if not videos_to_process:
+        print(f"\nNo recent videos found matching criteria. Exiting.")
         return
 
-    # Filter excluded folders
-    folders_to_scan = []
-    print(f"\nFiltering folders:")
-    for folder in all_user_folders:
-        if not isinstance(folder, dict):
-            print(f" Warning: Expected dictionary for folder, but get {type(folder)}: {folder}. Skipping this item.")
-            continue
-
-        folder_uri = folder.get('uri')
-        folder_id = folder_uri.split('/')[-1] if isinstance(folder_uri, str) and folder_uri else None
-        folder_name = folder.get('name', 'Unnamed Folder')
-
-        if folder_id and folder_id in EXCLUDED_FOLDER_IDS:
-            print(f" Excluding folder: '{folder_name}' (ID: {folder_id})")
-        elif folder_id:
-            folders_to_scan.append({'id': folder_id, 'name': folder_name})
-            print(f" Including folder: '{folder_name}' (ID: {folder_id})")
-        else:
-            print(f" Skipping folder with invalid URI/ID: {folder_uri}")
-
-    if not folders_to_scan:
-        print("No folders remaining to scan after exclusion. Exiting.")
-        return
-
-    # Calculate the datetime for 48 hours ago
-    forty_eight_hours_ago = datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)
-    print(f"\nLooking for videos uploaded in the last {LOOKBACK_HOURS} hours (since {forty_eight_hours_ago.isoformat()})")
-
-    all_recent_videos_from_scanned_folders = []
-    total_videos_scanned_from_folders = 0
-
-    print("\nCollecting videos from included folders:")
-    for folder_info in folders_to_scan:
-        folder_id = folder_info['id']
-        folder_name = folder_info['name']
-        print(f"Processing videos in folder: '{folder_name}' (ID: {folder_id})")
-        videos_in_current_folder = get_folder_videos(authenticated_user_id, folder_id) or []
-        total_videos_scanned_from_folders += len(videos_in_current_folder)
-
-        # filter videos from this folder for recent uploads
-        for video in videos_in_current_folder:
-            created_time_str = video.get('created_time')
-            if created_time_str:
-                try:
-                    video_created_dt = datetime.fromisoformat(created_time_str.replace('Z', '+00:00'))
-                    if video_created_dt > forty_eight_hours_ago:
-                        all_recent_videos_from_scanned_folders.append(video)
-                except ValueError as e:
-                    print(f" Warning: Could not parse created_time '{created_time_str}' for video {video.get('uri', 'N/A')} in folder {folder_id}. Error: {e}")
-            else:
-                print(f" Warning: Video URI {video.get('uri', 'N/A')} in folder {folder_id} is missing 'created_time'.")
-    
-    print(f"Finished collecting videos. Total videos scanned from included folders: {total_videos_scanned_from_folders}")
-    print(f"Total recent videos found in included folders: {len(all_recent_videos_from_scanned_folders)}")
-
-    if not all_recent_videos_from_scanned_folders:
-        print(f"\nNo new videos found in the last {LOOKBACK_HOURS} hours in the included folders. Exiting.")
-        return
-        
     processed_count = 0
-    skipped_count = 0
-    
-    print("\nProcessing recent videos for title updates:")
-    for i, video_info in enumerate(all_recent_videos_from_scanned_folders):
+    skipped_count_during_update = 0 # Renamed for clarity, avoiding conflict with skipped_by_... counts
+
+    print("\nProcessing filtered videos for title updates:")
+    for i, video_info in enumerate(videos_to_process):
         video_uri = video_info.get('uri')
         current_title = video_info.get('name')
         upload_date_str = video_info.get('created_time')
 
+        # Redundant checks as videos_to_process should be clean, good for safety
         if not video_uri:
             print(f"\nVideo {i+1}: Missing URI in video info. Skipping.")
-            skipped_count += 1
+            skipped_count_during_update += 1
             continue
 
         video_id = get_video_id_from_uri(video_uri)
-
         if not video_id:
             print(f"\nVideo {i+1} (URI: {video_uri}): Could not extract video ID from URI. Skipping.")
-            skipped_count += 1
+            skipped_count_during_update += 1
             continue
 
         print(f"\nProcessing Video {i+1} (ID: {video_id}):")
         if not current_title:
-            print(f"  Could not retrieve current title for video ID {video_id}. Skipping.")
-            skipped_count += 1
+            print(f" Could not retrieve current title for video ID {video_id}. Skipping.")
+            skipped_count_during_update += 1
             continue
-
         if not upload_date_str:
             print(f" Could not retrieve upload date for video ID {video_id}. Skipping.")
-            skipped_count += 1
             continue
-        
-        print(f"Current Title: '{current_title}'")
-        print(f"Upload Data (raw): {upload_date_str}")
 
-        try: 
-            dt_object = datetime.fromisoformat(upload_date_str.replace('Z', '+00:00')) # handle 'Z' for UTC
+        print(f" Current Title: '{current_title}'")
+        print(f" Upload Date (raw): '{upload_date_str}'")
+
+        try:
+            dt_object = datetime.fromisoformat(upload_date_str.replace('Z', '+00:00')) # Handle 'Z' for UTC
             formatted_date = dt_object.strftime(DATE_FORMAT)
-            print(f" Formatted Date: {formatted_date}")
+            print(f" Formatted date: {formatted_date}")
 
-            # Check if the title already contains the date to avoid duplicates
+            # check if the title already contains the date to avoid duplicates
             if formatted_date in current_title:
                 print(f" Video title already contains the date '{formatted_date}'. No update needed.")
-                skipped_count += 1
+                skipped_count_during_update += 1
                 continue
 
             new_title = f"{current_title} ({formatted_date})"
@@ -475,19 +411,19 @@ def main():
             if update_video_title(video_id, new_title):
                 processed_count += 1
             else:
-                skipped_count += 1 # count as skipped if update failed
+                skipped_count_during_update += 1 # count as skipped if update failed
 
         except ValueError as e:
             print(f" Error parsing date '{upload_date_str}': {e}. Please check DATE_FORMAT. Skipping.")
-            skipped_count += 1
+            skipped_count_during_update += 1
         except Exception as e:
             print(f" An unexpected error occurred during date processing or title update for video ID {video_id}: {e}. Skipping.")
-            skipped_count += 1
+            skipped_count_during_update += 1
 
     print(f"\n--- Processing Summary ---")
-    print(f"Videos Processing and Updated: {processed_count}")
-    print(f"Videos Skipped (error, already dated, or missing info): {skipped_count}")
+    print(f"Videos processed and updated: {processed_count}")
+    print(f"Videos Skipped (during update): {skipped_count_during_update}")
     print("---------------------------")
 
-if __name__ == "__main__":
-    main()
+    if __name__ == '__main__':
+        main()
